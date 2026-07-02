@@ -87,10 +87,23 @@ class MicroBitSensors:
                 with serial.Serial(port, BAUD, timeout=1.0) as ser:
                     log.info("micro:bit connected on %s", port)
                     ser.reset_input_buffer()
+                    last_rx = time.monotonic()
                     while not self._stop.is_set():
                         raw = ser.readline()
                         if not raw:
-                            continue  # timeout; keep the port open
+                            # A hard-killed reader can leave the DAPLink CDC
+                            # wedged (port opens, no data). A serial break
+                            # resets the target, rebooting MicroPython and
+                            # resuming the stream.
+                            if time.monotonic() - last_rx > 3.0:
+                                log.warning(
+                                    "%s silent; sending break to reset the board",
+                                    port,
+                                )
+                                ser.send_break(0.3)
+                                last_rx = time.monotonic()  # rate-limit
+                            continue
+                        last_rx = time.monotonic()
                         self._parse(raw.decode("ascii", "ignore").strip())
             except (OSError, serial.SerialException) as exc:
                 log.warning("micro:bit disconnected: %s", exc)
