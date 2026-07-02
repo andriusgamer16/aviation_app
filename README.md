@@ -43,15 +43,16 @@ The backend watches for the board continuously — plug it in (even while
 the server runs) and attitude/heading/g-load go live with green `MICROBIT`
 annunciators.
 
-**Compass**: no on-device calibration game needed. The board streams its
-raw magnetometer and the backend computes a tilt-compensated heading,
-learning the hard-iron offsets automatically as you rotate the board —
-just turn it through a slow full circle (any mounting). The `HDG`
-annunciator shows `CAL n% — ROTATE BOARD` until headings are trustworthy,
-then goes live; the learned calibration persists in `mag_cal.json` across
-restarts. (Button **A** still runs the classic on-device calibration,
-used as a fallback.) Button **B** re-levels the attitude, same as the
-LEVEL button in the UI.
+**Compass**: no on-device calibration game ("tilt to fill the screen").
+The board streams its raw magnetometer and the backend computes a
+tilt-compensated heading, learning the hard-iron offsets automatically as
+you rotate the board — just turn it through a slow full circle (any
+mounting). The `HDG` annunciator shows `CAL n% — ROTATE BOARD` until
+headings are trustworthy, then goes live; the learned calibration
+persists in `mag_cal.json` across restarts. Button **B** re-levels the
+attitude, same as the LEVEL button in the UI. Sensor troubleshooting
+lives at `/debug` (full compass pipeline, field scatter, calibration
+reset).
 
 If the board doesn't appear: use a *data* USB cable (charge-only cables
 are a classic trap) — Windows should show a `MICROBIT` drive and a COM

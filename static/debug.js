@@ -34,8 +34,6 @@ function update(d) {
     setVec("a", mb.accelG, 3);
     $("ag").textContent = fmt(mb.gMag, 3);
     $("aage").textContent = fmt(mb.ageS, 2) + "s";
-    $("hDev").textContent =
-      mb.onDeviceHeading == null ? "not calibrated" : fmt(mb.onDeviceHeading) + "°";
   }
   const m = mb && mb.mag;
   if (m) {
