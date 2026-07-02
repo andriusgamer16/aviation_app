@@ -9,6 +9,7 @@ driven by a Python backend reading this computer's real sensors:
 | Heading (HSI) | Compass (magnetic + true when available) | micro:bit compass, simulator |
 | G-load, slip/skid | Accelerometer | micro:bit accelerometer, simulator |
 | Turn rate | Heading derivative (mount-independent) | simulator |
+| Airspeed (IAS) | DC-motor wind generator on micro:bit pin P1 | GPS ground speed |
 | Position, ground speed, track, altitude | Windows Location / GPS | simulator |
 
 Sensors are accessed through WinRT (`Windows.Devices.Sensors`,
@@ -54,6 +55,17 @@ attitude, same as the LEVEL button in the UI. Sensor troubleshooting
 lives at `/debug` (full compass pipeline, field scatter, calibration
 reset).
 
+**Airspeed**: a small DC motor with a propeller works as a wind
+generator. Wire one motor lead to the micro:bit's GND pad and the other
+**through a ~1 kΩ series resistor** to the **P1** pad (croc clips work).
+Airflow spins the prop, the generated voltage rises with speed, and the
+speed tape switches from GPS `GS` to a live `IAS`. Calibrate with
+`AVIONICS_ASI_GAIN` (knots per volt, default 40) against a known
+airflow; raw P1 counts/volts are shown on `/debug`. Set
+`AVIONICS_ASI=off` when no motor is wired — a floating P1 pad picks up
+noise that would show as phantom airspeed. ⚠ A spun motor can exceed
+3.3 V and goes negative in reverse; keep it within 0–3.3 V at the pin.
+
 If the board doesn't appear: use a *data* USB cable (charge-only cables
 are a classic trap) — Windows should show a `MICROBIT` drive and a COM
 port. If pitch responds inverted on your unit, set
@@ -98,7 +110,7 @@ static/
 - `GET /` — the PFD
 - `WS /ws` — 20 Hz JSON frames:
   `{t, att{pitch,roll,src}, hdg{mag,true,src}, acc{x,y,z,g,slip,src},
-    gyro{x,y,z,src}|null, turnRateDps, vsMps,
+    gyro{x,y,z,src}|null, turnRateDps, vsMps, ias{kt,a1,volts,src},
     gps{lat,lon,altM,gsMps,trkDeg,accM,fixSrc,ageS,src},
     status{mode,sensors,zeroed,mbMagCal}}`
 - `POST /api/zero` — capture current attitude as level

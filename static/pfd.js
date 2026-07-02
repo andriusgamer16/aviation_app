@@ -57,7 +57,7 @@ const state = {
   everConnected: false,
   disp: {               // smoothed display values
     pitch: 0, roll: 0, hdg: 0, trk: 0,
-    gsKt: 0, altFt: 0, vsFpm: 0,
+    gsKt: 0, iasKt: 0, altFt: 0, vsFpm: 0,
     slip: 0, g: 1, turn: 0,
   },
 };
@@ -112,6 +112,7 @@ function updateDisplay(dt) {
     d.trk = wrap360(d.trk + shortestDeg(d.trk, f.gps.trkDeg) * (1 - Math.exp(-dt * 8)));
   }
   d.gsKt = ease(d.gsKt, (f.gps.gsMps ?? 0) * MPS_TO_KT, dt, 5);
+  d.iasKt = ease(d.iasKt, f.ias?.kt ?? 0, dt, 5);
   d.altFt = ease(d.altFt, (f.gps.altM ?? 0) * M_TO_FT, dt, 5);
   d.vsFpm = ease(d.vsFpm, f.vsMps * MPS_TO_FPM, dt, 4);
   d.slip = ease(d.slip, f.acc.slip, dt, 8);
@@ -317,9 +318,11 @@ function drawSpeedTape(L) {
   const { x, w } = L.spd;
   const y0 = cy - tapeH / 2;
   const f = state.frame;
-  const gs = state.disp.gsKt;
+  // Real IAS (DC-motor wind generator) when present, else GPS ground speed.
+  const hasIas = f.ias != null && f.ias.kt != null;
+  const gs = hasIas ? state.disp.iasKt : state.disp.gsKt;
   const pxPerKt = tapeH / 80;
-  const noData = f.gps.gsMps == null;
+  const noData = !hasIas && f.gps.gsMps == null;
 
   tapeBackground(x, y0, w, tapeH);
   ctx.save();
@@ -362,7 +365,7 @@ function drawSpeedTape(L) {
   ctx.font = FONT(12, 700);
   ctx.textAlign = "left";
   ctx.fillStyle = C.ink2;
-  ctx.fillText("GS KT", x + 6, y0 - 12);
+  ctx.fillText(hasIas ? "IAS KT" : "GS KT", x + 6, y0 - 12);
   if (noData) {
     ctx.fillStyle = C.amber;
     ctx.fillText("NO SPD SRC", x + 6, y0 + tapeH + 14);
@@ -697,6 +700,7 @@ function drawAnnunciators(L) {
     ["ATT", f.att.src],
     ["HDG", f.hdg.src],
     ["ACC", f.acc.src],
+    ["ASI", f.ias?.src ?? "off"],
     ["GPS", f.gps.src === "win" ? "live" : f.gps.src],
   ];
   const x = 16;
@@ -704,8 +708,9 @@ function drawAnnunciators(L) {
   ctx.font = FONT(11, 700);
   ctx.textBaseline = "middle";
   for (const [name, src] of rows) {
-    const simulated = src === "sim";
-    let label = simulated ? "SIM" : src.toUpperCase().slice(0, 12);
+    const simulated = src === "sim" || src === "off";
+    let label = src === "sim" ? "SIM" : src === "off" ? "OFF"
+      : src.toUpperCase().slice(0, 12);
     // A connected micro:bit auto-calibrates its compass as it is rotated;
     // show the progress until headings become trustworthy.
     if (name === "HDG" && simulated && f.status.sensors.microbit) {

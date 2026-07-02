@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import time
 
 from .fusion import (
@@ -29,6 +30,13 @@ from .simulator import FlightSimulator
 from .windows_sensors import WindowsSensors
 
 log = logging.getLogger("avionics.manager")
+
+# Airspeed from a DC-motor wind generator on micro:bit pin P1.
+# Generated voltage rises roughly linearly with prop RPM / airspeed;
+# calibrate the gain against a known speed (kt per volt).
+ASI_ENABLED = os.environ.get("AVIONICS_ASI", "on").lower() not in ("off", "0")
+ASI_GAIN_KT_PER_V = float(os.environ.get("AVIONICS_ASI_GAIN", "40.0"))
+ASI_ZERO_COUNTS = int(os.environ.get("AVIONICS_ASI_ZERO", "8"))  # noise floor
 
 _NO_SENSORS = {
     "accelerometer": False,
@@ -61,6 +69,7 @@ class Avionics:
         self._vs = 0.0
         self._last_alt: float | None = None
         self._last_alt_ts: float | None = None
+        self._ias = 0.0
 
     async def start(self) -> None:
         if self.sensors:
@@ -92,15 +101,23 @@ class Avionics:
             "magCal": self.mag.debug(),
             "mount": {"active": self.cal.active, "matrix": self.cal.m},
             "windows": dict(self.sensors.available) if self.sensors else None,
+            "airspeed": {
+                "enabled": ASI_ENABLED,
+                "gainKtPerV": ASI_GAIN_KT_PER_V,
+                "zeroCounts": ASI_ZERO_COUNTS,
+                "iasKt": round(self._ias, 1),
+            },
         }
         if mb is None:
             return out
         accel = mb["accel"]
+        a1 = mb.get("a1")
         entry = {
             "ageS": round(now - mb["ts"], 2),
             "accelG": [round(v, 3) for v in accel],
             "gMag": round(math.sqrt(sum(v * v for v in accel)), 3),
-            "onDeviceHeading": mb["heading"],
+            "a1": a1,
+            "a1Volts": None if a1 is None else round(a1 * 3.3 / 1023.0, 3),
             "mag": None,
         }
         mag = mb.get("mag")
@@ -183,12 +200,9 @@ class Avionics:
         # (tilt-compensated, auto hard-iron calibration), with the board's
         # own calibrated heading as a fallback for legacy firmware.
         mb_hdg = None
-        if mb is not None:
-            if mb.get("mag") is not None:
-                self.mag.observe(mb["mag"])
-                mb_hdg = self.mag.heading(mb["mag"], mb["accel"], self.cal)
-            if mb_hdg is None:
-                mb_hdg = mb["heading"]
+        if mb is not None and mb.get("mag") is not None:
+            self.mag.observe(mb["mag"])
+            mb_hdg = self.mag.heading(mb["mag"], mb["accel"], self.cal)
 
         cmp_reading = s.read_compass() if s else None
         if cmp_reading is not None:
@@ -276,6 +290,23 @@ class Avionics:
                 self._vs += (rate - self._vs) * 0.4
                 self._last_alt, self._last_alt_ts = alt, ts
 
+        # --- airspeed (DC-motor wind generator on micro:bit P1) --------------
+        ias_kt = None
+        a1 = mb.get("a1") if mb is not None else None
+        if ASI_ENABLED and a1 is not None:
+            counts = max(0, a1 - ASI_ZERO_COUNTS)
+            raw_kt = counts * (3.3 / 1023.0) * ASI_GAIN_KT_PER_V
+            self._ias += (raw_kt - self._ias) * min(1.0, dt * 2.5)
+            ias_kt = round(self._ias, 1)
+        else:
+            self._ias = 0.0
+        ias = {
+            "kt": ias_kt,
+            "a1": a1,
+            "volts": None if a1 is None else round(a1 * 3.3 / 1023.0, 3),
+            "src": "mb-p1" if ias_kt is not None else "off",
+        }
+
         srcs = (att_src, hdg_src, acc_src, gps["src"])
         mode = "sim" if all(x == "sim" for x in srcs) else (
             "live" if all(x != "sim" for x in srcs) else "mixed")
@@ -293,6 +324,7 @@ class Avionics:
             "gyro": gyro_block,
             "turnRateDps": round(self._turn_rate, 2),
             "vsMps": round(self._vs, 2),
+            "ias": ias,
             "gps": {k: (round(v, 6) if isinstance(v, float) else v)
                     for k, v in gps.items()},
             "status": {"mode": mode, "sensors": avail,

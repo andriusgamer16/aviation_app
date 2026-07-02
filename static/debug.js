@@ -34,6 +34,13 @@ function update(d) {
     setVec("a", mb.accelG, 3);
     $("ag").textContent = fmt(mb.gMag, 3);
     $("aage").textContent = fmt(mb.ageS, 2) + "s";
+    $("a1raw").textContent = fmt(mb.a1);
+    $("a1v").textContent = mb.a1Volts == null ? "--" : fmt(mb.a1Volts, 3) + " V";
+  }
+  if (d.airspeed) {
+    $("asiGain").textContent = fmt(d.airspeed.gainKtPerV, 0);
+    $("iasKt").textContent = d.airspeed.enabled
+      ? fmt(d.airspeed.iasKt, 1) + " kt" : "disabled";
   }
   const m = mb && mb.mag;
   if (m) {

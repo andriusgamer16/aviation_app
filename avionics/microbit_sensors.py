@@ -4,13 +4,14 @@ The micro:bit runs firmware/microbit_main.py (flash it with
 `python -m uflash firmware/microbit_main.py`), which streams lines over
 USB serial at 115200 baud, ~25 Hz:
 
-    MB,<ax>,<ay>,<az>,<mx>,<my>,<mz>,<btnB>
+    MB,<ax>,<ay>,<az>,<mx>,<my>,<mz>,<a1>,<btnB>
 
 ax/ay/az in milli-g; mx/my/mz raw magnetometer field in nano-tesla
 (consumed by mag_compass.py — no on-device calibration needed);
-btnB=1 on a B-button press (used as a physical "LEVEL" request).
-Older firmware formats (with an on-device heading field, with or
-without the magnetometer) are still accepted.
+a1 = analog reading of pin P1, 0-1023 over 0-3.3 V (airspeed from a
+DC-motor wind generator); btnB=1 on a B-button press (used as a
+physical "LEVEL" request). Firmware and parser are versioned together;
+reflash the board after pulling firmware changes.
 
 A daemon thread auto-detects the board by USB VID:PID (0D28:0204,
 DAPLink CDC), reconnects on unplug, and hands the freshest sample over
@@ -115,32 +116,19 @@ class MicroBitSensors:
         if not line.startswith("MB,"):
             return
         parts = line.split(",")
+        if len(parts) != 9:
+            return
         try:
-            if len(parts) >= 9:  # older format: mag + on-device heading
-                ax, ay, az = int(parts[1]), int(parts[2]), int(parts[3])
-                mx, my, mz = int(parts[4]), int(parts[5]), int(parts[6])
-                mag = (float(mx), _Y_SIGN * float(my), float(mz))
-                hdg = int(parts[7])
-                btn_b = parts[8] == "1"
-            elif len(parts) == 8:  # current format: accel + mag + button
-                ax, ay, az = int(parts[1]), int(parts[2]), int(parts[3])
-                mx, my, mz = int(parts[4]), int(parts[5]), int(parts[6])
-                mag = (float(mx), _Y_SIGN * float(my), float(mz))
-                hdg = -1
-                btn_b = parts[7] == "1"
-            elif len(parts) >= 6:  # legacy format: accel + heading only
-                ax, ay, az = int(parts[1]), int(parts[2]), int(parts[3])
-                mag = None
-                hdg = int(parts[4])
-                btn_b = parts[5] == "1"
-            else:
-                return
+            ax, ay, az = int(parts[1]), int(parts[2]), int(parts[3])
+            mx, my, mz = int(parts[4]), int(parts[5]), int(parts[6])
+            a1 = int(parts[7])
+            btn_b = parts[8] == "1"
         except ValueError:
             return
         sample = {
             "accel": (ax / 1024.0, _Y_SIGN * ay / 1024.0, az / 1024.0),
-            "mag": mag,
-            "heading": float(hdg) if 0 <= hdg < 360 else None,
+            "mag": (float(mx), _Y_SIGN * float(my), float(mz)),
+            "a1": a1 if 0 <= a1 <= 1023 else None,
             "ts": time.monotonic(),
         }
         with self._lock:
