@@ -2,3 +2,4 @@
 __pycache__/
 *.pyc
 mag_cal.json
+asi_cal.json

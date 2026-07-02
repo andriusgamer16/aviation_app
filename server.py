@@ -141,6 +141,16 @@ async def magcal_reset() -> dict:
     return {"reset": True}
 
 
+@app.get("/api/asi")
+async def asi_get() -> dict:
+    return avionics.asi_status()
+
+
+@app.post("/api/asi")
+async def asi_set(cfg: dict) -> dict:
+    return avionics.asi_update(cfg)
+
+
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket) -> None:
     await ws.accept()

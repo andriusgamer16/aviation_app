@@ -13,10 +13,12 @@ which instruments run on live hardware and which are simulated.
 """
 from __future__ import annotations
 
+import json
 import logging
 import math
 import os
 import time
+from pathlib import Path
 
 from .fusion import (
     ComplementaryFilter,
@@ -31,12 +33,44 @@ from .windows_sensors import WindowsSensors
 
 log = logging.getLogger("avionics.manager")
 
-# Airspeed from a DC-motor wind generator on micro:bit pin P1.
-# Generated voltage rises roughly linearly with prop RPM / airspeed;
-# calibrate the gain against a known speed (kt per volt).
-ASI_ENABLED = os.environ.get("AVIONICS_ASI", "on").lower() not in ("off", "0")
-ASI_GAIN_KT_PER_V = float(os.environ.get("AVIONICS_ASI_GAIN", "40.0"))
-ASI_ZERO_COUNTS = int(os.environ.get("AVIONICS_ASI_ZERO", "8"))  # noise floor
+_ASI_STORE = Path(__file__).resolve().parent.parent / "asi_cal.json"
+
+
+class AsiConfig:
+    """Airspeed (knots) conversion settings for the P1 wind generator.
+
+    Editable at runtime from the /debug page and persisted across
+    restarts; environment variables provide the initial defaults only.
+    Generated voltage rises roughly linearly with prop RPM / airspeed,
+    so kt = (a1 - zero) * 3.3/1023 * gain.
+    """
+
+    def __init__(self, store: Path | None = _ASI_STORE) -> None:
+        self._store = store
+        self.enabled = os.environ.get("AVIONICS_ASI", "on").lower() not in ("off", "0")
+        self.gain = float(os.environ.get("AVIONICS_ASI_GAIN", "40.0"))  # kt/V
+        self.zero = int(os.environ.get("AVIONICS_ASI_ZERO", "8"))       # counts
+        if store is not None and store.exists():
+            try:
+                data = json.loads(store.read_text())
+                self.enabled = bool(data.get("enabled", self.enabled))
+                self.gain = float(data.get("gainKtPerV", self.gain))
+                self.zero = int(data.get("zeroCounts", self.zero))
+                log.info("airspeed calibration loaded: %s", self.as_dict())
+            except Exception as exc:
+                log.warning("could not load %s: %s", store, exc)
+
+    def as_dict(self) -> dict:
+        return {"enabled": self.enabled, "gainKtPerV": round(self.gain, 3),
+                "zeroCounts": self.zero}
+
+    def save(self) -> None:
+        if self._store is None:
+            return
+        try:
+            self._store.write_text(json.dumps(self.as_dict()))
+        except OSError as exc:
+            log.warning("could not save %s: %s", self._store, exc)
 
 _NO_SENSORS = {
     "accelerometer": False,
@@ -70,6 +104,8 @@ class Avionics:
         self._last_alt: float | None = None
         self._last_alt_ts: float | None = None
         self._ias = 0.0
+        self._last_a1: int | None = None
+        self.asi = AsiConfig()
 
     async def start(self) -> None:
         if self.sensors:
@@ -91,6 +127,32 @@ class Avionics:
         log.info("mount calibration %s", "captured" if ok else "rejected")
         return {"calibrated": ok}
 
+    def asi_status(self) -> dict:
+        return {**self.asi.as_dict(), "a1": self._last_a1,
+                "iasKt": round(self._ias, 1)}
+
+    def asi_update(self, data: dict) -> dict:
+        """Apply a partial airspeed-config update from the UI and persist."""
+        if data.get("zeroNow") and self._last_a1 is not None:
+            # Current reading becomes the zero point (small margin for noise).
+            self.asi.zero = min(1023, int(self._last_a1) + 2)
+        kt = data.get("calibrateKt")
+        if kt is not None and self._last_a1 is not None:
+            volts = max(0.0, self._last_a1 - self.asi.zero) * 3.3 / 1023.0
+            if float(kt) > 0 and volts > 0.05:
+                self.asi.gain = float(kt) / volts
+        if "enabled" in data:
+            self.asi.enabled = bool(data["enabled"])
+        g = data.get("gainKtPerV")
+        if g is not None and 0 < float(g) < 10000:
+            self.asi.gain = float(g)
+        z = data.get("zeroCounts")
+        if z is not None and 0 <= int(z) <= 1023:
+            self.asi.zero = int(z)
+        self.asi.save()
+        log.info("airspeed config updated: %s", self.asi.as_dict())
+        return self.asi_status()
+
     def debug(self) -> dict:
         """Full compass-pipeline snapshot for the /debug page."""
         now = time.monotonic()
@@ -101,12 +163,7 @@ class Avionics:
             "magCal": self.mag.debug(),
             "mount": {"active": self.cal.active, "matrix": self.cal.m},
             "windows": dict(self.sensors.available) if self.sensors else None,
-            "airspeed": {
-                "enabled": ASI_ENABLED,
-                "gainKtPerV": ASI_GAIN_KT_PER_V,
-                "zeroCounts": ASI_ZERO_COUNTS,
-                "iasKt": round(self._ias, 1),
-            },
+            "airspeed": {**self.asi.as_dict(), "iasKt": round(self._ias, 1)},
         }
         if mb is None:
             return out
@@ -293,9 +350,10 @@ class Avionics:
         # --- airspeed (DC-motor wind generator on micro:bit P1) --------------
         ias_kt = None
         a1 = mb.get("a1") if mb is not None else None
-        if ASI_ENABLED and a1 is not None:
-            counts = max(0, a1 - ASI_ZERO_COUNTS)
-            raw_kt = counts * (3.3 / 1023.0) * ASI_GAIN_KT_PER_V
+        self._last_a1 = a1
+        if self.asi.enabled and a1 is not None:
+            counts = max(0, a1 - self.asi.zero)
+            raw_kt = counts * (3.3 / 1023.0) * self.asi.gain
             self._ias += (raw_kt - self._ias) * min(1.0, dt * 2.5)
             ias_kt = round(self._ias, 1)
         else:

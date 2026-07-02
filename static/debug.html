@@ -31,6 +31,12 @@
   #hint b { color: #c4ccd6; }
   .progress { height: 8px; background: #1a2129; border-radius: 4px; overflow: hidden; }
   .progress i { display: block; height: 100%; background: #4fd47f; }
+  .cfg { display: flex; gap: 10px; align-items: center; margin: 8px 0;
+         font: 12px "Segoe UI", system-ui, sans-serif; color: #c4ccd6;
+         flex-wrap: wrap; }
+  .cfg input[type=number] { width: 64px; background: #11151a; color: #e8edf2;
+         border: 1px solid #3a4654; border-radius: 3px; padding: 3px 5px;
+         font: 12px Consolas, monospace; }
 </style>
 </head>
 <body>
@@ -68,9 +74,19 @@
     <table>
       <tr><td>P1 raw (0-1023)</td><td id="a1raw">--</td></tr>
       <tr><td>P1 voltage</td><td id="a1v">--</td></tr>
-      <tr><td>IAS (gain <span id="asiGain">--</span> kt/V)</td>
-          <td class="big" id="iasKt">--</td></tr>
+      <tr><td>IAS</td><td class="big" id="iasKt">--</td></tr>
     </table>
+    <div class="cfg">
+      <label><input type="checkbox" id="asiOn"> enabled</label>
+      <label>gain <input id="asiGainIn" type="number" step="0.1" min="0"> kt/V</label>
+      <label>zero <input id="asiZeroIn" type="number" step="1" min="0" max="1023"> counts</label>
+      <button id="asiSave">SAVE</button>
+    </div>
+    <div class="cfg">
+      <button id="asiZeroNow" title="Use the current P1 reading as the zero point (do this with the prop still)">ZERO = CURRENT</button>
+      <label>current airflow is <input id="asiKnownKt" type="number" step="0.5" min="0"> kt</label>
+      <button id="asiCalBtn" title="Compute the gain from the current P1 reading at a known airflow">CALIBRATE GAIN</button>
+    </div>
 
     <h2>MAGNETOMETER PIPELINE (nT)</h2>
     <table>

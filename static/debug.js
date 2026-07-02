@@ -38,9 +38,9 @@ function update(d) {
     $("a1v").textContent = mb.a1Volts == null ? "--" : fmt(mb.a1Volts, 3) + " V";
   }
   if (d.airspeed) {
-    $("asiGain").textContent = fmt(d.airspeed.gainKtPerV, 0);
     $("iasKt").textContent = d.airspeed.enabled
       ? fmt(d.airspeed.iasKt, 1) + " kt" : "disabled";
+    fillAsiInputs(d.airspeed, false);
   }
   const m = mb && mb.mag;
   if (m) {
@@ -131,6 +131,39 @@ function drawScatter() {
     ctx.stroke();
   }
 }
+
+// ------------------------------------------------- airspeed configuration
+let asiFilled = false;
+function fillAsiInputs(cfg, force) {
+  // Populate once (and after explicit saves) so polling doesn't clobber
+  // values the user is editing.
+  if (asiFilled && !force) return;
+  asiFilled = true;
+  $("asiOn").checked = !!cfg.enabled;
+  $("asiGainIn").value = cfg.gainKtPerV;
+  $("asiZeroIn").value = cfg.zeroCounts;
+}
+
+async function asiPost(body) {
+  const r = await fetch("/api/asi", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  fillAsiInputs(await r.json(), true);
+}
+
+$("asiSave").addEventListener("click", () =>
+  asiPost({
+    enabled: $("asiOn").checked,
+    gainKtPerV: parseFloat($("asiGainIn").value),
+    zeroCounts: parseInt($("asiZeroIn").value, 10),
+  }));
+$("asiZeroNow").addEventListener("click", () => asiPost({ zeroNow: true }));
+$("asiCalBtn").addEventListener("click", () => {
+  const kt = parseFloat($("asiKnownKt").value);
+  if (kt > 0) asiPost({ calibrateKt: kt });
+});
 
 async function poll() {
   try {

@@ -59,12 +59,19 @@ reset).
 generator. Wire one motor lead to the micro:bit's GND pad and the other
 **through a ~1 kΩ series resistor** to the **P1** pad (croc clips work).
 Airflow spins the prop, the generated voltage rises with speed, and the
-speed tape switches from GPS `GS` to a live `IAS`. Calibrate with
-`AVIONICS_ASI_GAIN` (knots per volt, default 40) against a known
-airflow; raw P1 counts/volts are shown on `/debug`. Set
-`AVIONICS_ASI=off` when no motor is wired — a floating P1 pad picks up
-noise that would show as phantom airspeed. ⚠ A spun motor can exceed
-3.3 V and goes negative in reverse; keep it within 0–3.3 V at the pin.
+speed tape switches from GPS `GS` to a live `IAS`.
+
+The knots conversion is configurable at runtime from `/debug`
+(persisted in `asi_cal.json`): an enable toggle, the gain (knots per
+volt), the zero offset, plus two one-click helpers — **ZERO = CURRENT**
+(press with the prop still to cancel any idle offset) and **CALIBRATE
+GAIN** (hold a known airflow, type its speed in knots, click — the gain
+is computed from the live reading). `AVIONICS_ASI`,
+`AVIONICS_ASI_GAIN`, `AVIONICS_ASI_ZERO` env vars set the initial
+defaults only. Disable the channel when no motor is wired — a floating
+P1 pad picks up noise that shows as phantom airspeed. ⚠ A spun motor
+can exceed 3.3 V and goes negative in reverse; keep it within 0–3.3 V
+at the pin.
 
 If the board doesn't appear: use a *data* USB cable (charge-only cables
 are a classic trap) — Windows should show a `MICROBIT` drive and a COM
