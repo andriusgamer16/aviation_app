@@ -61,6 +61,11 @@ generator. Wire one motor lead to the micro:bit's GND pad and the other
 Airflow spins the prop, the generated voltage rises with speed, and the
 speed tape switches from GPS `GS` to a live `IAS`.
 
+A record panel next to the speed tape shows the **highest airspeed
+ever** (persisted in `ias_record.json`; `RESET RECORD` on `/debug`) and
+the **highest of the last 5 seconds**; the MAX value turns cyan while a
+new record is being set.
+
 The knots conversion is configurable at runtime from `/debug`
 (persisted in `asi_cal.json`): an enable toggle, the gain (knots per
 volt), the zero offset, plus two one-click helpers — **ZERO = CURRENT**
@@ -117,7 +122,8 @@ static/
 - `GET /` — the PFD
 - `WS /ws` — 20 Hz JSON frames:
   `{t, att{pitch,roll,src}, hdg{mag,true,src}, acc{x,y,z,g,slip,src},
-    gyro{x,y,z,src}|null, turnRateDps, vsMps, ias{kt,a1,volts,src},
+    gyro{x,y,z,src}|null, turnRateDps, vsMps,
+    ias{kt,a1,volts,maxKt,max5Kt,src},
     gps{lat,lon,altM,gsMps,trkDeg,accM,fixSrc,ageS,src},
     status{mode,sensors,zeroed,mbMagCal}}`
 - `POST /api/zero` — capture current attitude as level

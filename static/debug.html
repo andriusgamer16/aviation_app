@@ -75,6 +75,7 @@
       <tr><td>P1 raw (0-1023)</td><td id="a1raw">--</td></tr>
       <tr><td>P1 voltage</td><td id="a1v">--</td></tr>
       <tr><td>IAS</td><td class="big" id="iasKt">--</td></tr>
+      <tr><td>record (max ever)</td><td id="asiMax">--</td></tr>
     </table>
     <div class="cfg">
       <label><input type="checkbox" id="asiOn"> enabled</label>
@@ -86,6 +87,7 @@
       <button id="asiZeroNow" title="Use the current P1 reading as the zero point (do this with the prop still)">ZERO = CURRENT</button>
       <label>current airflow is <input id="asiKnownKt" type="number" step="0.5" min="0"> kt</label>
       <button id="asiCalBtn" title="Compute the gain from the current P1 reading at a known airflow">CALIBRATE GAIN</button>
+      <button id="asiRecReset" title="Clear the all-time airspeed record">RESET RECORD</button>
     </div>
 
     <h2>MAGNETOMETER PIPELINE (nT)</h2>

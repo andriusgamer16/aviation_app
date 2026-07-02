@@ -18,6 +18,7 @@ import logging
 import math
 import os
 import time
+from collections import deque
 from pathlib import Path
 
 from .fusion import (
@@ -34,6 +35,7 @@ from .windows_sensors import WindowsSensors
 log = logging.getLogger("avionics.manager")
 
 _ASI_STORE = Path(__file__).resolve().parent.parent / "asi_cal.json"
+_IAS_RECORD_STORE = Path(__file__).resolve().parent.parent / "ias_record.json"
 
 
 class AsiConfig:
@@ -106,6 +108,18 @@ class Avionics:
         self._ias = 0.0
         self._last_a1: int | None = None
         self.asi = AsiConfig()
+        self._ias_hist: deque[tuple[float, float]] = deque()  # (ts, kt), 5 s
+        self._ias_max = 0.0
+        self._ias_max_saved = 0.0
+        self._ias_max_save_t = 0.0
+        try:
+            if _IAS_RECORD_STORE.exists():
+                v = json.loads(_IAS_RECORD_STORE.read_text()).get("maxKt")
+                if isinstance(v, (int, float)) and v >= 0:
+                    self._ias_max = self._ias_max_saved = float(v)
+                    log.info("airspeed record loaded: %.1f kt", self._ias_max)
+        except Exception as exc:
+            log.warning("could not load %s: %s", _IAS_RECORD_STORE, exc)
 
     async def start(self) -> None:
         if self.sensors:
@@ -116,6 +130,23 @@ class Avionics:
             self.sensors.stop()
         if self.microbit:
             self.microbit.stop()
+        self._save_record(force=True)
+
+    def _save_record(self, force: bool = False) -> None:
+        """Persist the all-time airspeed record (throttled while flying)."""
+        if self._ias_max <= self._ias_max_saved:
+            return
+        now = time.monotonic()
+        if not force and now - self._ias_max_save_t < 2.0:
+            return
+        try:
+            _IAS_RECORD_STORE.write_text(
+                json.dumps({"maxKt": round(self._ias_max, 1)})
+            )
+            self._ias_max_saved = self._ias_max
+            self._ias_max_save_t = now
+        except OSError as exc:
+            log.warning("could not save %s: %s", _IAS_RECORD_STORE, exc)
 
     def zero(self) -> dict:
         """Capture the current gravity direction as straight-and-level."""
@@ -129,10 +160,20 @@ class Avionics:
 
     def asi_status(self) -> dict:
         return {**self.asi.as_dict(), "a1": self._last_a1,
-                "iasKt": round(self._ias, 1)}
+                "iasKt": round(self._ias, 1),
+                "maxKt": round(self._ias_max, 1)}
 
     def asi_update(self, data: dict) -> dict:
         """Apply a partial airspeed-config update from the UI and persist."""
+        if data.get("resetRecord"):
+            self._ias_max = 0.0
+            self._ias_max_saved = 0.0
+            self._ias_hist.clear()
+            try:
+                _IAS_RECORD_STORE.unlink(missing_ok=True)
+            except OSError as exc:
+                log.warning("could not delete %s: %s", _IAS_RECORD_STORE, exc)
+            log.info("airspeed record reset")
         if data.get("zeroNow") and self._last_a1 is not None:
             # Current reading becomes the zero point (small margin for noise).
             self.asi.zero = min(1023, int(self._last_a1) + 2)
@@ -163,7 +204,8 @@ class Avionics:
             "magCal": self.mag.debug(),
             "mount": {"active": self.cal.active, "matrix": self.cal.m},
             "windows": dict(self.sensors.available) if self.sensors else None,
-            "airspeed": {**self.asi.as_dict(), "iasKt": round(self._ias, 1)},
+            "airspeed": {**self.asi.as_dict(), "iasKt": round(self._ias, 1),
+                         "maxKt": round(self._ias_max, 1)},
         }
         if mb is None:
             return out
@@ -358,10 +400,25 @@ class Avionics:
             ias_kt = round(self._ias, 1)
         else:
             self._ias = 0.0
+        # Highest-airspeed registrator: all-time record (persisted) and a
+        # rolling 5-second maximum.
+        max5 = None
+        if ias_kt is not None:
+            self._ias_hist.append((now, ias_kt))
+            while self._ias_hist and now - self._ias_hist[0][0] > 5.0:
+                self._ias_hist.popleft()
+            max5 = max(v for _, v in self._ias_hist)
+            if ias_kt > self._ias_max:
+                self._ias_max = ias_kt
+                self._save_record()
+        else:
+            self._ias_hist.clear()
         ias = {
             "kt": ias_kt,
             "a1": a1,
             "volts": None if a1 is None else round(a1 * 3.3 / 1023.0, 3),
+            "maxKt": round(self._ias_max, 1),
+            "max5Kt": None if max5 is None else round(max5, 1),
             "src": "mb-p1" if ias_kt is not None else "off",
         }
 

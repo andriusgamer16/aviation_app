@@ -370,6 +370,32 @@ function drawSpeedTape(L) {
     ctx.fillStyle = C.amber;
     ctx.fillText("NO SPD SRC", x + 6, y0 + tapeH + 14);
   }
+
+  // Highest-airspeed registrator: all-time record + rolling 5 s maximum.
+  if (hasIas) {
+    const rx = x + w + 10, rw = 96, rh = 62, ry = y0;
+    const rec = f.ias.maxKt, r5 = f.ias.max5Kt;
+    const settingNow = rec != null && r5 != null && r5 >= rec - 0.05;
+    ctx.fillStyle = C.tapeBg;
+    ctx.beginPath();
+    ctx.roundRect(rx, ry, rw, rh, 6);
+    ctx.fill();
+    ctx.strokeStyle = C.frame;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    ctx.font = FONT(10, 700);
+    ctx.fillStyle = C.inkMut;
+    ctx.fillText("MAX", rx + 8, ry + 17);
+    ctx.fillText("MAX 5S", rx + 8, ry + 45);
+    ctx.font = MONO(16, 700);
+    ctx.textAlign = "right";
+    ctx.fillStyle = settingNow ? C.cyan : C.white;  // cyan = record being set
+    ctx.fillText(rec == null ? "--" : String(Math.round(rec)), rx + rw - 8, ry + 17);
+    ctx.fillStyle = C.white;
+    ctx.fillText(r5 == null ? "--" : String(Math.round(r5)), rx + rw - 8, ry + 45);
+  }
 }
 
 function drawAltTape(L) {

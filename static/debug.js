@@ -40,6 +40,7 @@ function update(d) {
   if (d.airspeed) {
     $("iasKt").textContent = d.airspeed.enabled
       ? fmt(d.airspeed.iasKt, 1) + " kt" : "disabled";
+    $("asiMax").textContent = fmt(d.airspeed.maxKt, 1) + " kt";
     fillAsiInputs(d.airspeed, false);
   }
   const m = mb && mb.mag;
@@ -163,6 +164,9 @@ $("asiZeroNow").addEventListener("click", () => asiPost({ zeroNow: true }));
 $("asiCalBtn").addEventListener("click", () => {
   const kt = parseFloat($("asiKnownKt").value);
   if (kt > 0) asiPost({ calibrateKt: kt });
+});
+$("asiRecReset").addEventListener("click", () => {
+  if (confirm("Clear the all-time airspeed record?")) asiPost({ resetRecord: true });
 });
 
 async function poll() {
