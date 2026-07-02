@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PyAvionics — sensor debug</title>
+<style>
+  html, body { margin: 0; background: #0b0d10; color: #e8edf2;
+               font: 13px Consolas, "Cascadia Mono", monospace; }
+  #page { display: flex; flex-wrap: wrap; gap: 18px; padding: 16px; }
+  .col { min-width: 380px; flex: 1; }
+  h1 { font-size: 15px; letter-spacing: .08em; margin: 0 0 10px; }
+  h2 { font-size: 12px; letter-spacing: .1em; color: #8d99a8; margin: 16px 0 6px;
+       border-bottom: 1px solid #2a3340; padding-bottom: 3px; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { text-align: right; padding: 2px 8px; }
+  th { color: #8d99a8; font-weight: 600; }
+  td:first-child, th:first-child { text-align: left; color: #8d99a8; }
+  .big { font-size: 20px; font-weight: 700; }
+  .ok { color: #4fd47f; } .warn { color: #ffbf47; } .bad { color: #e0442e; }
+  .mag { color: #ff5bff; }
+  canvas { background: #11151a; border: 1px solid #2a3340; border-radius: 6px; }
+  button, a.btn { background: #1a2129; color: #e8edf2; border: 1px solid #3a4654;
+           border-radius: 4px; padding: 5px 14px; cursor: pointer;
+           font: 600 12px "Segoe UI", system-ui, sans-serif;
+           letter-spacing: .06em; text-decoration: none; display: inline-block; }
+  button:hover, a.btn:hover { background: #263140; }
+  #bar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+  #hint { color: #8d99a8; font: 12px "Segoe UI", system-ui, sans-serif;
+          line-height: 1.5; max-width: 560px; }
+  #hint b { color: #c4ccd6; }
+  .progress { height: 8px; background: #1a2129; border-radius: 4px; overflow: hidden; }
+  .progress i { display: block; height: 100%; background: #4fd47f; }
+</style>
+</head>
+<body>
+<div id="page">
+  <div class="col">
+    <h1>SENSOR DEBUG</h1>
+    <div id="bar">
+      <button id="levelBtn">LEVEL</button>
+      <button id="resetBtn">RESET MAG CAL</button>
+      <a class="btn" href="/">PFD</a>
+      <span id="status"></span>
+    </div>
+    <div id="warn" class="warn" style="display:none; font: 12px 'Segoe UI', sans-serif;
+         border: 1px solid #ffbf47; border-radius: 4px; padding: 8px 10px; margin-bottom: 8px;">
+      ⚠ Calibration envelope looks polluted (span &gt; 110000 nT — more than
+      Earth's field can produce). The board was likely swept near a magnet or
+      metal. Press <b>RESET MAG CAL</b>, keep the board &gt;40 cm from the
+      laptop/phone, and rotate it slowly through a full turn.
+    </div>
+
+    <h2>HEADINGS</h2>
+    <table id="headings">
+      <tr><td>tilt-compensated (used by PFD)</td><td class="big mag" id="hTilt">--</td></tr>
+      <tr><td>flat (no tilt comp)</td><td id="hFlat">--</td></tr>
+      <tr><td>micro:bit on-device (btn-A cal)</td><td id="hDev">--</td></tr>
+    </table>
+
+    <h2>ACCELEROMETER (device frame, g)</h2>
+    <table>
+      <tr><th></th><th>X</th><th>Y</th><th>Z</th><th>|g|</th><th>age</th></tr>
+      <tr><td>accel</td><td id="ax">-</td><td id="ay">-</td><td id="az">-</td>
+          <td id="ag">-</td><td id="aage">-</td></tr>
+    </table>
+
+    <h2>MAGNETOMETER PIPELINE (nT)</h2>
+    <table>
+      <tr><th></th><th>X</th><th>Y</th><th>Z</th></tr>
+      <tr><td>raw</td><td id="mrx">-</td><td id="mry">-</td><td id="mrz">-</td></tr>
+      <tr><td>&minus; hard-iron offset</td><td id="mcx">-</td><td id="mcy">-</td><td id="mcz">-</td></tr>
+      <tr><td>&rarr; re-leveled (mount)</td><td id="mvx">-</td><td id="mvy">-</td><td id="mvz">-</td></tr>
+      <tr><td>&rarr; tilt-compensated</td><td id="mhx">-</td><td id="mhy">-</td><td id="mhz">-</td></tr>
+    </table>
+    <table>
+      <tr><td>|B| total (expect ~50000 nT, STABLE while rotating)</td><td id="bmag">-</td></tr>
+      <tr><td>|B| horizontal (expect ~15000-20000 nT)</td><td id="bh">-</td></tr>
+      <tr><td>magnetic dip (expect ~ +70&deg; in the Baltics)</td><td id="dip">-</td></tr>
+    </table>
+
+    <h2>HARD-IRON CALIBRATION ENVELOPE (nT)</h2>
+    <table>
+      <tr><th>axis</th><th>min</th><th>max</th><th>offset</th><th>span</th></tr>
+      <tr><td>X</td><td id="e0min">-</td><td id="e0max">-</td><td id="e0off">-</td><td id="e0span">-</td></tr>
+      <tr><td>Y</td><td id="e1min">-</td><td id="e1max">-</td><td id="e1off">-</td><td id="e1span">-</td></tr>
+      <tr><td>Z</td><td id="e2min">-</td><td id="e2max">-</td><td id="e2off">-</td><td id="e2span">-</td></tr>
+    </table>
+    <p>progress <span id="prog">-</span></p>
+    <div class="progress"><i id="progbar" style="width:0%"></i></div>
+  </div>
+
+  <div class="col">
+    <h1>FIELD SCATTER (re-leveled X/Y)</h1>
+    <canvas id="scatter" width="480" height="480"></canvas>
+    <div id="hint">
+      <p><b>How to read this:</b> the dot is the horizontal direction of magnetic
+      north in the board frame; the trail accumulates as you rotate. With good
+      calibration it traces a <b>circle centered on the crosshair</b>. An
+      off-center circle = bad hard-iron offsets (press RESET MAG CAL and slowly
+      rotate a full turn away from the laptop/metal). A wildly varying |B| total
+      means magnetic interference nearby.</p>
+      <p><b>Cardinal test:</b> hold the board flat and point its <b>logo/USB edge</b>
+      north, then east, south, west. The tilt-compensated heading should read
+      ~000&deg;, 090&deg;, 180&deg;, 270&deg;. If east/west are <b>swapped</b>
+      (090 &harr; 270), the mirror/handedness is wrong — report that.</p>
+    </div>
+  </div>
+</div>
+<script src="/static/debug.js"></script>
+</body>
+</html>

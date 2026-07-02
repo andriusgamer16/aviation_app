@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PyAvionics — PFD</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%231c66c4'/%3E%3Cpath d='M1 8h14' stroke='%23fff'/%3E%3Cpath d='M1 8a7 7 0 0 0 14 0z' fill='%237c5330'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main id="wrap">
+  <canvas id="pfd" aria-label="Primary flight display"></canvas>
+  <div id="bar">
+    <button id="zeroBtn" title="Capture the current attitude as straight-and-level">LEVEL</button>
+    <span id="conn" class="tag off">CONNECTING</span>
+  </div>
+</main>
+<script src="/static/pfd.js"></script>
+</body>
+</html>

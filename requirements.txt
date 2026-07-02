@@ -1,0 +1,11 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+# BBC micro:bit sensor pod over USB serial (optional hardware)
+pyserial>=3.5
+uflash>=2.0
+# Windows sensor access (pywinrt). Optional: the app falls back to the
+# built-in flight simulator when these are missing or no hardware exists.
+winrt-runtime>=3.0; sys_platform == 'win32'
+winrt-Windows.Devices.Sensors>=3.0; sys_platform == 'win32'
+winrt-Windows.Devices.Geolocation>=3.0; sys_platform == 'win32'
+winrt-Windows.Foundation>=3.0; sys_platform == 'win32'
